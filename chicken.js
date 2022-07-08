@@ -1,16 +1,20 @@
+// ====== IMPORTS ======
 //Use body parser to encode and decode json request
 var bodyParser = require('body-parser');
 //Use express
 var express = require('express');
-var app = express();
+//Use pg to handle SQL requests
+const { Client } = require('pg');
 //Use pg-prepared to handle sql injections
 var prep = require('pg-prepared')
+
+var app = express();
 var port = 8000;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-const { Client } = require('pg');
+// ====== DATABASE CONFIGURATION ======
 const client = new Client({
   user: '',
   host: '',
@@ -19,13 +23,16 @@ const client = new Client({
   port: 5432,
 });
 
+// Connect to the database
 client.connect();
 
+// Listen on the specified port
 app.listen(port, function() {
   var message = "server running on port: " + port;
   console.log(message);
 });
 
+// Create the database if it does not exist
 client.query('create table if not exists chicken( \
     "id" SERIAL, \
     "name" VARCHAR(255) NOT NULL, \
@@ -35,10 +42,12 @@ client.query('create table if not exists chicken( \
     "isRunning" BOOLEAN DEFAULT false, \
     PRIMARY KEY ("id"));', (err, res) => { });
 
+// Route '/' which print something on the browser
 app.get("/", function(request, response) {
   response.send("Welcome to the chicken run !!! ");
 });
 
+// GET route for the CRUD
 app.get("/chicken", function(request, response) {
   console.log("GET chicken request");
   client.query('SELECT * from chicken', (err, res) => {
@@ -59,6 +68,20 @@ app.get("/chicken", function(request, response) {
   });
 });
 
+// GET Increment steps for all chickens which are running
+app.get("/chicken/run", function(request, response) {
+  console.log("Run chickens");
+  let prepared = prep('UPDATE chicken SET steps=steps+1 WHERE "isRunning"=true;')
+  client.query(prepared(), (err, res) => {
+    if (err)
+      response.status(400).send("Error while deleting datas");
+    else {
+      response.json(res.rows);
+    }
+  });
+});
+
+// GET route for a specified chicken named
 app.get("/chicken/:name", function(request, response) {
   let name = request.params.name;
   console.log("GET chicken named " + name + " request");
@@ -81,6 +104,7 @@ app.get("/chicken/:name", function(request, response) {
   });
 });
 
+// POST route to add a new chicken
 app.post("/chicken", function(request, response) {
   console.log("POST chicken request");
 
@@ -98,8 +122,6 @@ app.post("/chicken", function(request, response) {
     steps: request.body.steps,
     isRunning: request.body.isRunning,
   };
-
-  console.log(replace_struct.birthday)
 
   if (replace_struct.steps === undefined) {
     replace_struct.steps = 0;
@@ -119,6 +141,7 @@ app.post("/chicken", function(request, response) {
   });
 });
 
+// PUT route to modify the chicken selected by the name
 app.put("/chicken/:name", function(request, response) {
   let name = request.params.name;
 
@@ -157,6 +180,7 @@ app.put("/chicken/:name", function(request, response) {
   });
 });
 
+// PATCH route to modify the specified attribute in the request's body for the chicken selected by the name
 app.patch("/chicken/:name", function(request, response) {
   let name = request.params.name;
   let first = true;
@@ -223,6 +247,7 @@ app.patch("/chicken/:name", function(request, response) {
   });
 });
 
+// DELETE delete chickens selected by the name
 app.delete("/chicken/:name", function(request, response) {
   let name = request.params.name;
   console.log("DELETE chicken request");
