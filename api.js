@@ -1,11 +1,13 @@
 // ====== IMPORTS ======
-//Use body parser to encode and decode json request
+// Chicken class
+var Chicken = require('./chicken.js');
+// Use body parser to encode and decode json request
 var bodyParser = require('body-parser');
-//Use express
+// Use express
 var express = require('express');
-//Use pg to handle SQL requests
+// Use pg to handle SQL requests
 const { Client } = require('pg');
-//Use pg-prepared to handle sql injections
+// Use pg-prepared to handle sql injections
 var prep = require('pg-prepared')
 
 var app = express();
@@ -42,6 +44,8 @@ client.query('create table if not exists chicken( \
     "isRunning" BOOLEAN DEFAULT false, \
     PRIMARY KEY ("id"));', (err, res) => { });
 
+// ====== WEBSERVICES ======
+
 // Route '/' which print something on the browser
 app.get("/", function(request, response) {
   response.send("Welcome to the chicken run !!! ");
@@ -57,13 +61,7 @@ app.get("/chicken", function(request, response) {
       response.status(400).send("Error while getting datas");
     else {
       let returned_list = res.rows.map(obj => {
-        return {
-          name: obj.name,
-          birthday: new Date(obj.birthday * 1000),
-          weight: obj.weight,
-          steps: obj.steps,
-          isRunning: obj.isRunning,
-        }
+        return new Chicken.Chicken(obj)
       })
       response.json(returned_list);
     }
@@ -101,13 +99,7 @@ app.get("/chicken/:name", function(request, response) {
       response.status(400).send("Error while getting datas");
     else {
       let returned_list = res.rows.map(obj => {
-        return {
-          name: obj.name,
-          birthday: new Date(obj.birthday * 1000),
-          weight: obj.weight,
-          steps: obj.steps,
-          isRunning: obj.isRunning,
-        }
+        return new Chicken.Chicken(obj)
       })
       response.json(returned_list);
     }
@@ -124,13 +116,7 @@ app.post("/chicken", function(request, response) {
     return;
   }
 
-  let replace_struct = {
-    name: request.body.name,
-    birthday: Date.parse(request.body.birthday) / 1000,
-    weight: request.body.weight,
-    steps: request.body.steps,
-    isRunning: request.body.isRunning,
-  };
+  let replace_struct = new Chicken.Chicken(request.body, false);
 
   if (replace_struct.steps === undefined) {
     replace_struct.steps = 0;
@@ -164,14 +150,7 @@ app.put("/chicken/:name", function(request, response) {
   }
 
   console.log("PUT chicken request");
-  let replace_struct = {
-    name: name,
-    new_name: request.body.name,
-    birthday: Date.parse(request.body.birthday) / 1000,
-    weight: request.body.weight,
-    steps: request.body.steps,
-    isRunning: request.body.isRunning,
-  };
+  let replace_struct = new Chicken.Chicken(request.body, false);
 
   if (replace_struct.new_name === undefined) {
     replace_struct.new_name = name;
