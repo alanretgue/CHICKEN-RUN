@@ -32,7 +32,7 @@ app.listen(port, function() {
   console.log(message);
 });
 
-// Create the database if it does not exist
+// Create the chicken database if it does not exist
 client.query('create table if not exists chicken( \
     "id" SERIAL, \
     "name" VARCHAR(255) NOT NULL, \
@@ -50,6 +50,8 @@ app.get("/", function(request, response) {
 // GET route for the CRUD
 app.get("/chicken", function(request, response) {
   console.log("GET chicken request");
+
+  // Perform the SQL request
   client.query('SELECT * from chicken', (err, res) => {
     if (err)
       response.status(400).send("Error while getting datas");
@@ -71,7 +73,11 @@ app.get("/chicken", function(request, response) {
 // GET Increment steps for all chickens which are running
 app.get("/chicken/run", function(request, response) {
   console.log("Run chickens");
+
+  // prepare the SQL request to avoid SQL injections
   let prepared = prep('UPDATE chicken SET steps=steps+1 WHERE "isRunning"=true;')
+
+  // Perform the prepared SQL request
   client.query(prepared(), (err, res) => {
     if (err)
       response.status(400).send("Error while deleting datas");
@@ -85,7 +91,11 @@ app.get("/chicken/run", function(request, response) {
 app.get("/chicken/:name", function(request, response) {
   let name = request.params.name;
   console.log("GET chicken named " + name + " request");
+
+  // prepare the SQL request to avoid SQL injections
   let prepared = prep('SELECT * from chicken WHERE name=(${name});')
+
+  // Perform the prepared SQL request
   client.query(prepared({ name: name }), (err, res) => {
     if (err)
       response.status(400).send("Error while getting datas");
@@ -114,7 +124,6 @@ app.post("/chicken", function(request, response) {
     return;
   }
 
-  let prepared = prep('INSERT INTO chicken (name, birthday, weight, steps, "isRunning")\n values (${name}, ${birthday}, ${weight}, ${steps}, ${isRunning});')
   let replace_struct = {
     name: request.body.name,
     birthday: Date.parse(request.body.birthday) / 1000,
@@ -130,6 +139,10 @@ app.post("/chicken", function(request, response) {
     replace_struct.isRunning = false;
   }
 
+  // prepare the SQL request to avoid SQL injections
+  let prepared = prep('INSERT INTO chicken (name, birthday, weight, steps, "isRunning")\n values (${name}, ${birthday}, ${weight}, ${steps}, ${isRunning});')
+
+  // Perform the prepared SQL request
   client.query(prepared(replace_struct), (err, res) => {
     if (err) {
       response.status(400).send("Error while posting datas");
@@ -170,7 +183,10 @@ app.put("/chicken/:name", function(request, response) {
     replace_struct.isRunning = false;
   }
 
+  // prepare the SQL request to avoid SQL injections
   let prepared = prep('UPDATE chicken SET name=${new_name}, birthday=${birthday}, weight=${weight}, steps=${steps}, "isRunning"=${isRunning} WHERE name=${name};')
+
+  // Perform the prepared SQL request
   client.query(prepared(replace_struct), (err, res) => {
     if (err)
       response.status(400).send("Error while deleting datas");
@@ -183,61 +199,45 @@ app.put("/chicken/:name", function(request, response) {
 // PATCH route to modify the specified attribute in the request's body for the chicken selected by the name
 app.patch("/chicken/:name", function(request, response) {
   let name = request.params.name;
-  let first = true;
+  // Use to have a variadic update SQL request
   let str_modify = "";
+  // handle comma in the str_modify
+  let first = true;
 
   console.log("PATCH chicken request");
   let replace_struct = {
-    name: name,
+    chicken_name: name,
   };
 
-  if (request.body.name !== undefined) {
-    replace_struct.new_name = request.body.name;
-    if (!first) {
-      str_modify += ", ";
-    } else {
-      first = false;
+  // struct to handle various number of modification
+  let dict_attr = {
+    name: "name=${name}",
+    birthday: "birthday=${birthday}",
+    weight: "weight=${weight}",
+    steps: "steps=${steps}",
+    isRunning: "'isRunning'=${isRunning}",
+  };
+
+  // Add specified modification to the SQL request
+  for (key in request.body) {
+    if (dict_attr[key] === undefined) {
+      continue;
     }
-    str_modify += "name=${new_name}";
-  }
-  if (request.body.birthday !== undefined) {
-    replace_struct.birthday = Date.parse(request.body.weight) / 1000;
-    if (!first) {
-      str_modify += ", ";
-    } else {
-      first = false;
+    if (request.body[key] !== undefined) {
+      replace_struct[key] = request.body[key];
+      if (!first) {
+        str_modify += ", ";
+      } else {
+        first = false;
+      }
+      str_modify += dict_attr[key];
     }
-    str_modify += "birthday=${birthday}";
-  }
-  if (request.body.weight !== undefined) {
-    replace_struct.weight = request.body.weight;
-    if (!first) {
-      str_modify += ", ";
-    } else {
-      first = false;
-    }
-    str_modify += "weight=${weight}";
-  }
-  if (request.body.steps !== undefined) {
-    replace_struct.steps = request.body.steps;
-    if (!first) {
-      str_modify += ", ";
-    } else {
-      first = false;
-    }
-    str_modify += "steps=${steps}";
-  }
-  if (request.body.isRunning !== undefined) {
-    replace_struct.isRunning = request.body.isRunning;
-    if (!first) {
-      str_modify += ", ";
-    } else {
-      first = false;
-    }
-    str_modify += "'isRunning'=${isRunning}";
   }
 
-  let prepared = prep('UPDATE chicken SET ' + str_modify + ' WHERE name=${name};')
+  // prepare the SQL request to avoid SQL injections
+  let prepared = prep('UPDATE chicken SET ' + str_modify + ' WHERE name=${chicken_name};')
+
+  // Perform the prepared SQL request
   client.query(prepared(replace_struct), (err, res) => {
     if (err)
       response.status(400).send("Error while deleting datas");
@@ -251,7 +251,11 @@ app.patch("/chicken/:name", function(request, response) {
 app.delete("/chicken/:name", function(request, response) {
   let name = request.params.name;
   console.log("DELETE chicken request");
+
+  // prepare the SQL request to avoid SQL injections
   let prepared = prep('DELETE FROM chicken \n WHERE name=(${name});')
+
+  // Perform the prepared SQL request
   client.query(prepared({ name: name }), (err, res) => {
     if (err)
       response.status(400).send("Error while deleting datas");
