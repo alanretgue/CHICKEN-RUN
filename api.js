@@ -20,7 +20,7 @@ app.use(bodyParser.json());
 const client = new Client({
   user: '',
   host: '',
-  database: 'tutorial_1', // name of the database
+  database: 'chicken', // name of the database
   password: '',
   port: 5432,
 });
@@ -42,6 +42,12 @@ client.query('create table if not exists chicken( \
     "weight" INTEGER NOT NULL, \
     "steps" INTEGER DEFAULT 0, \
     "isRunning" BOOLEAN DEFAULT false, \
+    "idCoop" INTEGER, \
+    PRIMARY KEY ("id"));', (err, res) => { });
+
+client.query('create table if not exists coop( \
+    "id" SERIAL, \
+    "name" VARCHAR(255) NOT NULL, \
     PRIMARY KEY ("id"));', (err, res) => { });
 
 // ====== WEBSERVICES ======
@@ -110,6 +116,7 @@ app.get("/chicken/:name", function(request, response) {
 app.post("/chicken", function(request, response) {
   console.log("POST chicken request");
 
+  // Can't POST a new chicken without a name or a weight
   if (request.body.name === undefined ||
     request.body.weight === undefined) {
     response.status(500).send({ error: "The name and the weight of the chicken must be specified" });
@@ -124,9 +131,15 @@ app.post("/chicken", function(request, response) {
   if (replace_struct.isRunning === undefined) {
     replace_struct.isRunning = false;
   }
+  if (request.body.idCoop === undefined) {
+    replace_struct.idCoop = null;
+  } else {
+    replace_struct.idCoop = request.body.idCoop;
+  }
+
 
   // prepare the SQL request to avoid SQL injections
-  let prepared = prep('INSERT INTO chicken (name, birthday, weight, steps, "isRunning")\n values (${name}, ${birthday}, ${weight}, ${steps}, ${isRunning});')
+  let prepared = prep('INSERT INTO chicken (name, birthday, weight, steps, "isRunning", "idCoop")\n values (${name}, ${birthday}, ${weight}, ${steps}, ${isRunning}, ${idCoop});')
 
   // Perform the prepared SQL request
   client.query(prepared(replace_struct), (err, res) => {
@@ -142,14 +155,15 @@ app.post("/chicken", function(request, response) {
 
 // PUT route to modify the chicken selected by the name
 app.put("/chicken/:name", function(request, response) {
+  console.log("PUT chicken request");
   let name = request.params.name;
 
+  // Can't PUT a chicken without a weight
   if (request.body.weight === undefined) {
     response.status(500).send({ error: "The name and the weight of the chicken must be specified" });
     return;
   }
 
-  console.log("PUT chicken request");
   let replace_struct = new Chicken.Chicken(request.body, false);
 
   if (replace_struct.new_name === undefined) {
@@ -160,6 +174,11 @@ app.put("/chicken/:name", function(request, response) {
   }
   if (replace_struct.isRunning === undefined) {
     replace_struct.isRunning = false;
+  }
+  if (request.body.idCoop === undefined) {
+    replace_struct.idCoop = null;
+  } else {
+    replace_struct.idCoop = request.body.idCoop;
   }
 
   // prepare the SQL request to avoid SQL injections
@@ -177,13 +196,13 @@ app.put("/chicken/:name", function(request, response) {
 
 // PATCH route to modify the specified attribute in the request's body for the chicken selected by the name
 app.patch("/chicken/:name", function(request, response) {
+  console.log("PATCH chicken request");
   let name = request.params.name;
   // Use to have a variadic update SQL request
   let str_modify = "";
   // handle comma in the str_modify
   let first = true;
 
-  console.log("PATCH chicken request");
   let replace_struct = {
     chicken_name: name,
   };
@@ -194,7 +213,8 @@ app.patch("/chicken/:name", function(request, response) {
     birthday: "birthday=${birthday}",
     weight: "weight=${weight}",
     steps: "steps=${steps}",
-    isRunning: "'isRunning'=${isRunning}",
+    isRunning: '"isRunning"=${isRunning}',
+    idCoop: '"idCoop"=${idCoop}',
   };
 
   // Add specified modification to the SQL request
@@ -218,8 +238,9 @@ app.patch("/chicken/:name", function(request, response) {
 
   // Perform the prepared SQL request
   client.query(prepared(replace_struct), (err, res) => {
-    if (err)
-      response.status(400).send("Error while deleting datas");
+    if (err) {
+      response.status(400).send("Error while updating datas");
+    }
     else {
       response.json(res.rows);
     }
@@ -228,8 +249,8 @@ app.patch("/chicken/:name", function(request, response) {
 
 // DELETE delete chickens selected by the name
 app.delete("/chicken/:name", function(request, response) {
-  let name = request.params.name;
   console.log("DELETE chicken request");
+  let name = request.params.name;
 
   // prepare the SQL request to avoid SQL injections
   let prepared = prep('DELETE FROM chicken \n WHERE name=(${name});')
@@ -238,6 +259,63 @@ app.delete("/chicken/:name", function(request, response) {
   client.query(prepared({ name: name }), (err, res) => {
     if (err)
       response.status(400).send("Error while deleting datas");
+    else {
+      response.json(res.rows);
+    }
+  });
+});
+
+// ====== BONUS ======
+
+// GET route to add a new coop
+app.get("/coop", async function(request, response) {
+  console.log("GET coop request");
+
+  let selected_coop;
+  let selected_chicken;
+
+  // Perform the SQL request to select all coop
+  client.query('SELECT * from coop', (err, res) => {
+    if (err)
+      response.status(400).send("Error while getting datas");
+    else {
+      selected_coop = res.rows;
+      // Perform the SQL request to select all chickens
+      client.query('SELECT * from chicken', (err, res) => {
+        if (err)
+          response.status(400).send("Error while getting datas");
+        else {
+          selected_chicken = res.rows;
+
+          // Create a list of chickens in every coop
+          for (elt of selected_coop) {
+            elt.chickens = selected_chicken.filter(x => x.idCoop === elt.id).map(obj => new Chicken.Chicken(obj));
+          }
+          response.json(selected_coop);
+        }
+      });
+    }
+  });
+});
+
+// POST route to add a new coop
+app.post("/coop", function(request, response) {
+  console.log("POST coop request");
+
+  // Can't POST a new chicken without a name or a weight
+  if (request.body.name === undefined) {
+    response.status(500).send({ error: "The name of the coop must be specified" });
+    return;
+  }
+
+  // prepare the SQL request to avoid SQL injections
+  let prepared = prep('INSERT INTO coop (name)\n values (${name});')
+
+  // Perform the prepared SQL request
+  client.query(prepared({ name: request.body.name }), (err, res) => {
+    if (err) {
+      response.status(400).send("Error while posting datas");
+    }
     else {
       response.json(res.rows);
     }
